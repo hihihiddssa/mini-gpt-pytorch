@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .venv/
 checkpoints/
+.vscode/
+generation-*.txt
