@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent
 def main():
     parser = argparse.ArgumentParser(description="Generate text with a trained checkpoint")
     parser.add_argument("--checkpoint", type=Path, default=ROOT / "checkpoints" / "latest.pt")
-    parser.add_argument("--prompt", default="周六")
+    parser.add_argument("--prompt", default="面包")
     parser.add_argument("--max-new-tokens", type=int, default=100)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--greedy", action="store_true")
