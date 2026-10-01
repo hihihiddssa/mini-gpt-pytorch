@@ -1,23 +1,32 @@
 # Mini GPT From Scratch
 
-一个能从真实中文文本学习下一字符预测、保存模型并生成文字的小型 Decoder-only Transformer。使用 PyTorch 基础组件实现因果多头注意力、FFN、Pre-Norm 残差 Decoder blocks 和完整 GPT 模型，适合逐步学习数据流与训练机制。
+一个能从真实中文文本学习下一字符预测、保存模型并生成文字的小型 Decoder-only Transformer。使用 PyTorch 基础组件实现因果多头注意力、FFN、Pre-Norm 残差 Decoder blocks 和完整 GPT 模型。
 
-当前语料是简体版《孽海花》，已完成一次本机 CUDA 50,000 步训练。模型能够生成带有小说词汇和对话形式的文字，但句子仍有明显的语义错误，不能视为成熟的文本生成模型。
+A small decoder-only Transformer that learns next-character prediction from real Chinese text, saves model checkpoints, and generates text. Causal multi-head attention, feed-forward networks, Pre-Norm residual decoder blocks, and the complete GPT model are implemented with basic PyTorch components.
 
-## 运行
+当前语料是简体版《孽海花》，已完成一次本机 CUDA 50,000 步训练。模型能生成带有小说词汇和对话形式的文字，但句子仍有明显的语义错误，不能视为成熟的文本生成模型。
+
+The current corpus is a Simplified Chinese edition of *Nie Hai Hua* (《孽海花》). One local training run of 50,000 steps on CUDA has been completed. The model produces vocabulary and dialogue patterns resembling the novel, but its sentences still contain clear semantic errors. It is not a mature text generation model.
+
+## 运行 / Running the Project
 
 需要 Python 3.10+ 和 PyTorch。在项目目录和自己的 Python 环境中运行：
+
+Requires Python 3.10+ and PyTorch. Run the following commands from the project directory in your Python environment:
 
 ```bash
 pip install -r requirements.txt
 
 # 快速检查训练流程，单独保存以保留已有的 latest.pt
+# Run a short training check without overwriting an existing latest.pt
 python train.py --steps 50 --checkpoint checkpoints/smoke.pt
 
 # 按当前默认配置训练 50,000 步
+# Train for 50,000 steps with the current default configuration
 python train.py
 
-# 从当前 checkpoint 生成，默认 prompt 为“第四回”
+# 从当前 checkpoint 生成，默认提示词为“第四回”
+# Generate from the current checkpoint; the default prompt is "第四回"
 python generate.py
 python generate.py --prompt 第四回 --max-new-tokens 100 --temperature 1.0
 python generate.py --prompt 第四回 --max-new-tokens 100 --greedy
@@ -25,49 +34,65 @@ python generate.py --prompt 第四回 --max-new-tokens 100 --greedy
 
 程序自动使用可用的 CUDA，否则使用 CPU。`--data` 可以指定其他 UTF-8 文本，`--checkpoint` 可以指定保存或加载路径。每次运行 `train.py` 都从随机权重开始训练，默认会覆盖 `checkpoints/latest.pt`。
 
+The program uses CUDA when available and otherwise runs on the CPU. Use `--data` to select another UTF-8 corpus and `--checkpoint` to select a save or load path. Each run of `train.py` starts from random weights and overwrites `checkpoints/latest.pt` by default.
+
 checkpoint 保存模型权重、配置、字符表和训练步数，可用于加载模型和生成；没有保存优化器状态，也没有实现断点续训入口。`checkpoints/` 已被 Git 忽略，GitHub 仓库不包含训练权重。从仓库克隆后，需要先训练，或自行放入相匹配的 checkpoint。
+
+A checkpoint stores model weights, configuration, the character vocabulary, and the training step count. It supports loading the model for generation, but does not store optimizer state, and the training script does not support resuming a run. The `checkpoints/` directory is ignored by Git, so trained weights are not included in the GitHub repository. After cloning, train a model or supply a compatible checkpoint.
 
 字符表从训练文本构建并写入 checkpoint。提示词中的字符必须出现在该 checkpoint 的词表中。替换语料后应重新训练；生成时使用 checkpoint 中保存的词表与结构配置。
 
-## 当前训练语料
+The character vocabulary is built from the training corpus and saved in the checkpoint. Every character in a prompt must exist in that checkpoint's vocabulary. Retrain after replacing the corpus; generation uses the vocabulary and architecture configuration stored in the checkpoint.
 
-`data/train.txt` 是曾朴的《孽海花》，来源为 [Project Gutenberg，电子书 25128](https://www.gutenberg.org/ebooks/25128)。使用该版本全部 35 回，经 OpenCC 繁转简，并清理网站说明、排版空格和段落内的硬换行。
+## 当前训练语料 / Current Training Corpus
 
-| 项目 | 数值 |
+`data/train.txt` 是曾朴的《孽海花》，来源为 [Project Gutenberg，电子书 25128 / eBook 25128](https://www.gutenberg.org/ebooks/25128)。使用该版本全部 35 回，经 OpenCC 繁转简，并清理网站说明、排版空格和段落内的硬换行。
+
+`data/train.txt` contains *Nie Hai Hua* by Zeng Pu, downloaded from Project Gutenberg, eBook 25128. All 35 chapters of the source edition are included. The text was converted from Traditional to Simplified Chinese with OpenCC, and website boilerplate, layout spaces, and hard line breaks within paragraphs were removed.
+
+| 项目 / Item | 数值 / Value |
 | --- | --- |
-| 正文汉字数 | 216,777 |
-| 字符数（含标点、换行等） | 254,222 |
-| 字符词表大小 | 4,091 |
-| 章节数 | 35 回 |
-| 文件编码 | UTF-8，简体中文 |
+| 正文汉字数 / Chinese characters in the novel | 216,777 |
+| 字符数（含标点、换行等）/ Total characters, including punctuation and line breaks | 254,222 |
+| 字符词表大小 / Character vocabulary size | 4,091 |
+| 章节数 / Chapters | 35 |
+| 文件编码与文字 / Encoding and script | UTF-8，简体中文 / Simplified Chinese |
 
-来源、处理过程与统计见 [data/SOURCE.md](data/SOURCE.md)，原始下载文本的许可页脚见 [data/LICENSE-gutenberg.txt](data/LICENSE-gutenberg.txt)。语料来源提供的版本与其他出版版本可能有差异。
+来源、处理过程与统计见 [data/SOURCE.md](data/SOURCE.md)，原始下载文本的许可页脚见 [data/LICENSE-gutenberg.txt](data/LICENSE-gutenberg.txt)。来源提供的版本与其他出版版本可能有差异。
 
-## 当前配置
+See `data/SOURCE.md` for provenance, preprocessing, and corpus statistics, and `data/LICENSE-gutenberg.txt` for the license footer from the original download. The source edition may differ from other published editions.
 
-| 参数 | 数值 | 含义 |
+## 当前配置 / Current Configuration
+
+| 参数 / Parameter | 数值 / Value | 含义 / Description |
 | --- | --- | --- |
-| `block_size` | 32 | 每次可见的上下文长度 |
-| `n_embd` | 64 | 每个字符的隐藏向量维度 |
-| `n_head` | 4 | 注意力头数，每头 16 维 |
-| `n_layer` | 2 | Decoder block 层数 |
-| `dropout` | 0.0 | 当前不丢弃输出 |
-| `batch_size` | 16 | 每次更新使用的文本片段数 |
-| `max_steps` | 50,000 | 默认参数更新次数 |
-| `eval_interval` | 250 | 平均 loss 的输出间隔 |
-| `eval_batches` | 20 | 每次估计平均 loss 的 batch 数 |
-| `learning_rate` | 0.0003 | AdamW 学习率 |
-| `seed` | 42 | 随机种子 |
+| `block_size` | 32 | 每次可见的上下文长度 / Context length in characters |
+| `n_embd` | 64 | 每个字符的隐藏向量维度 / Hidden dimension per character |
+| `n_head` | 4 | 注意力头数，每头 16 维 / Attention heads, 16 dimensions per head |
+| `n_layer` | 2 | Decoder block 层数 / Number of decoder blocks |
+| `dropout` | 0.0 | 当前不丢弃输出 / Dropout disabled |
+| `batch_size` | 16 | 每次更新使用的文本片段数 / Text sequences per parameter update |
+| `max_steps` | 50,000 | 默认参数更新次数 / Default number of parameter updates |
+| `eval_interval` | 250 | 平均 loss 的输出间隔 / Interval between average loss reports |
+| `eval_batches` | 20 | 每次估计平均 loss 的 batch 数 / Batches per average loss estimate |
+| `learning_rate` | 0.0003 | AdamW 学习率 / AdamW learning rate |
+| `seed` | 42 | 随机种子 / Random seed |
 
 本次记录中的模型参数量为 **629,883**。每个训练 batch 的输入和目标形状都是 `[16, 32]`，logits 形状是 `[16, 32, 4091]`。
 
-## 本机训练记录
+The recorded model has **629,883 parameters**. Training inputs and targets both have shape `[16, 32]`, and logits have shape `[16, 32, 4091]`.
 
-以下记录来自用户提供的真实终端输出，执行 `python train.py`，使用 CUDA 训练 50,000 步，并保存为 `checkpoints/latest.pt`。
+## 本机训练记录 / Local Training Results
+
+以下记录来自用户提供的真实终端输出：运行 `python train.py`，使用 CUDA 训练 50,000 步，并保存为 `checkpoints/latest.pt`。
+
+The following records come from actual terminal output supplied by the user: `python train.py` was run on CUDA for 50,000 steps, saving the checkpoint to `checkpoints/latest.pt`.
 
 `train_loss` 是当前训练 batch 的损失；`eval_loss` 是从同一份训练文本随机抽取 20 个 batch 得到的平均损失。当前没有独立验证集，不能用这些数字判断对新文本的泛化能力。抽样 loss 会波动，不要求每次打印都下降。
 
-| step | train_loss | eval_loss |
+`train_loss` is the loss on the current training batch. `eval_loss` is the average loss over 20 batches randomly sampled from the same training corpus. There is no separate validation set, so these values do not measure generalization to unseen text. Sampled losses fluctuate and do not necessarily decrease at every report.
+
+| 步数 / Step | train_loss | eval_loss |
 | --- | --- | --- |
 | 1 | 8.4570 | 8.4632 |
 | 1,000 | 5.6489 | 5.8750 |
@@ -79,7 +104,7 @@ checkpoint 保存模型权重、配置、字符表和训练步数，可用于加
 | 50,000 | 3.7610 | 3.8021 |
 
 <details>
-<summary>展开完整训练日志（201 次 loss 输出）</summary>
+<summary>展开完整训练日志（201 次 loss 输出）/ Expand the full training log (201 loss reports)</summary>
 
 ```text
 device=cuda characters=254222 vocab=4091 parameters=629,883
@@ -287,21 +312,29 @@ step=50000 train_loss=3.7610 eval_loss=3.8021
 checkpoint=checkpoints/latest.pt
 ```
 
-checkpoint 路径在此使用项目相对路径展示，其余训练数值与原始记录一致。
+checkpoint 路径使用项目相对路径展示，其余训练数值与原始记录一致。
+
+The checkpoint path is shown relative to the project directory. All other training values are unchanged from the original record.
 
 </details>
 
-## 实际生成结果
+## 实际生成结果 / Actual Generated Samples
 
-以下两次输出摘自同一份终端记录，提示词为 `第四回`。当时直接运行 `generate.py`，使用默认 temperature 1.0 随机采样、生成 100 个新字符；输出包含原提示词。随机采样未设置固定种子，因此再次运行不保证逐字相同。这些示例保留实际错误，没有润色。
+以下两次输出摘自同一份终端记录，提示词为 `第四回`。当时直接运行 `generate.py`，使用默认 temperature 1.0 随机采样，生成 100 个新字符；输出包含原提示词。随机采样没有设置固定种子，再次运行不保证逐字相同。示例保留实际错误，没有润色。
 
-第一次：
+The two samples below come from the same terminal record, using the prompt `第四回` ("Chapter Four"). Running `generate.py` with its defaults sampled 100 new characters at temperature 1.0; the output includes the original prompt. Sampling used no fixed seed, so another run may produce different text. Errors are preserved as generated, without editing.
+
+生成正文保留中文原始输出，不作翻译，以忠实展示模型的实际结果。
+
+The generated text is kept in its original Chinese without translation to preserve the model's actual output.
+
+第一次 / Sample 1:
 
 ```text
 第四回请训罢，一坐半晌，白坐在前面上，一个红三绿色，锦吟道：「还要的挚日，哪里是黑旗将军火的呢？我们做得令，没有所问你去刚赴理也深，实在大家未足。这一天，我也决定说的。」一个何安道：「死妓街的主意发？你们不
 ```
 
-第二次：
+第二次 / Sample 2:
 
 ```text
 第四回南洋的猛，老爷午后没起来，叫那车门生。」雯青因道：「别碎乐呀！」美菽素里头问道：「克先请俄、德国天消息下诸位分子。」小燕道：「照这班广东图事业，目瞪起酒醒来。」小燕道：「何听他空著，𫉁云也里只剩她的老
@@ -309,31 +342,28 @@ checkpoint 路径在此使用项目相对路径展示，其余训练数值与原
 
 可以观察到小说人物名、对话标点和部分句式，但上下文与含义仍不稳定。当前上下文只有 32 个字符，模型规模也很小，loss 下降不等于已经学会写连贯故事。
 
-## 文件
+The output contains character names, dialogue punctuation, and some sentence patterns from the novel, but its meaning and continuity remain unreliable. The context window is only 32 characters, and the model is small. A lower loss does not mean it has learned to write coherent stories.
 
-| 文件 | 用途 |
+## 文件 / Project Files
+
+| 文件 / File | 用途 / Purpose |
 | --- | --- |
-| `data/train.txt` | 简体《孽海花》训练语料 |
-| `data/SOURCE.md` | 语料来源、处理方法与统计 |
-| `data/LICENSE-gutenberg.txt` | 原始下载文本的许可页脚 |
-| `tokenizer.py` | 字符与 token ID 互转 |
-| `dataset.py` | 随机截取输入和右移一位的预测目标 |
-| `model.py` | Embedding、因果多头注意力、FFN、Pre-Norm Decoder blocks、GPT 和生成 |
-| `config.py` | 模型结构与训练参数 |
-| `train.py` | Cross entropy、AdamW 训练、loss 输出和 checkpoint 保存 |
-| `generate.py` | checkpoint 加载、贪心或 temperature 采样 |
+| `data/train.txt` | 简体《孽海花》训练语料 / Simplified Chinese novel corpus |
+| `data/SOURCE.md` | 语料来源、处理方法与统计 / Corpus provenance, preprocessing, and statistics |
+| `data/LICENSE-gutenberg.txt` | 原始下载文本的许可页脚 / License footer from the original download |
+| `tokenizer.py` | 字符与 token ID 互转 / Character-to-ID encoding and decoding |
+| `dataset.py` | 随机截取输入和右移一位的预测目标 / Random input sequences and targets shifted by one character |
+| `model.py` | Embedding、因果多头注意力、FFN、Pre-Norm Decoder blocks、GPT 和生成 / Embeddings, causal multi-head attention, FFN, Pre-Norm decoder blocks, GPT, and generation |
+| `config.py` | 模型结构与训练参数 / Model and training configuration |
+| `train.py` | Cross entropy、AdamW 训练、loss 输出和 checkpoint 保存 / Cross-entropy loss, AdamW training, loss reporting, and checkpoint saving |
+| `generate.py` | checkpoint 加载、贪心或 temperature 采样 / Checkpoint loading, greedy decoding, and temperature sampling |
 
-## 一批数据的路径
+## 一批数据的路径 / Batch Data Flow
 
-`文本 → 字符 ID → x/y（目标 y 右移一位）→ token + position embedding → Decoder blocks → logits → cross entropy → 反向传播 → AdamW`。
+`文本 → 字符 ID → x/y（目标 y 右移一位）→ token + position embedding → Decoder blocks → logits → cross entropy → 反向传播 → AdamW`
+
+`Text → character IDs → x/y (targets shifted by one character) → token + position embeddings → decoder blocks → logits → cross-entropy loss → backpropagation → AdamW`
 
 用 `B` 表示 batch size、`T` 表示序列长度、`C` 表示隐藏维度、`H` 表示头数、`V` 表示词表大小：输入与目标 `[B,T]`，embedding `[B,T,C]`，Q/K/V 拆头后 `[B,H,T,C/H]`，注意力权重 `[B,H,T,T]`，logits `[B,T,V]`。生成时，每一步只取最后一个位置的 logits 选择下一个字符，再把它接入上下文。
 
-## 学习顺序
-
-1. 先运行训练和生成，确认完整流程。
-2. 追踪一个 batch 从原始文字到 loss 的完整数据流。
-3. 依次学习 Embedding → Self-Attention → Multi-Head → FFN → Norm/Residual → Decoder Block → 完整模型。
-4. 学习 next-token loss、反向传播、AdamW 和 checkpoint。
-5. 学习 greedy 和 temperature generation。
-6. 最后形成自己的注解版代码。
+Let `B` be batch size, `T` sequence length, `C` hidden dimension, `H` the number of heads, and `V` vocabulary size. Inputs and targets have shape `[B,T]`; embeddings `[B,T,C]`; Q/K/V after splitting into heads `[B,H,T,C/H]`; attention weights `[B,H,T,T]`; and logits `[B,T,V]`. During generation, the logits at the last position select the next character, which is then appended to the context.
