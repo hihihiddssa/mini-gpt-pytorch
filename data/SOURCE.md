@@ -1,13 +1,20 @@
-# 训练语料来源
+# 训练语料 / Training corpus
 
-作品：《孽海花》；作者：曾朴（Zeng Pu，1872–1935）。
+- 作品 / Title：《春明外史》 / Chunming Waishi
+- 作者 / Author：张恨水 / Zhang Henshui (1895–1967)
+- 来源 / Source：https://www.xuges.com/xdmj/zhs/cmws/index.htm
+- 获取日期 / Retrieved：2026-10-02
+- 内容 / Content：正文第 1–86 回，共 353 个分页；不含前序、后序、续序及相关资料。
+- 体裁 / Style：民国白话小说，有少量诗词和旧式表达。Vernacular Republican-era fiction, with occasional poetry and period expressions.
+- 处理 / Processing：移除 HTML、导航、脚本及缩进；保留段落、标点和回目；OpenCC t2s 转为简体；UTF-8 无 BOM；未重复或补写正文。
+- 总字符 / Characters (including punctuation and newlines)：899,430
+- 汉字 / Han characters：738,250
+- 字符词表 / Character vocabulary：3,764
+- SHA-256：`2f001207ea88c82860a28005151795481b3a1f1f1cc22990bfca3536c94cb671`
 
-来源：[Project Gutenberg，电子书 25128](https://www.gutenberg.org/ebooks/25128)。该网站将此版本标记为 Public domain in the USA。
+原作发表于 1924–1928 年。使用原小说正文，未收入现代编者导读或网站说明。原作在中国大陆的财产权保护期已届满；早于 1931 年发表的原文在美国也已进入公版。保留作者署名。网站排版及现代整理内容不在训练文件内。
 
-原始 TXT：https://www.gutenberg.org/cache/epub/25128/pg25128.txt
+The original novel was published in 1924–1928. This corpus contains the original fiction, excluding modern editorial introductions and website material. The original work's economic copyright term has expired in mainland China; the pre-1931 original is also public domain in the US. Author attribution is retained.
 
-下载日期：2026-10-01。使用来源提供的全部 35 回，未重复扩充或截断凑数。删除英文站点页眉、制作署名和许可页脚；移除排版空格，合并段落内的硬换行，保留章节与段落。随后使用 OpenCC t2s 进行繁体到简体转换，未改写小说内容。原始页脚与许可单独保存在 LICENSE-gutenberg.txt，不参与训练。
-
-简体正文含 216,777 个汉字，254,222 个字符（含标点及换行），4,091 种字符，35 回。以上统计针对来源提供的版本，不保证与其他出版版本的篇幅一致。
-
-替换语料后请重新训练：词表与旧 checkpoint 不同，旧 checkpoint 仍使用旧词表。
+背景 / Background：https://en.wikipedia.org/wiki/Chunming_waishi
+版权参考 / Public-domain reference：https://zh.wikisource.org/zh-hans/Help:公有领域

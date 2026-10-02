@@ -1,369 +1,212 @@
 # Mini GPT From Scratch
 
-一个能从真实中文文本学习下一字符预测、保存模型并生成文字的小型 Decoder-only Transformer。使用 PyTorch 基础组件实现因果多头注意力、FFN、Pre-Norm 残差 Decoder blocks 和完整 GPT 模型。
+从零实现并在本机训练的小型字符级 Decoder-only Transformer。这是一个从基础组件走到真实中文小说训练的学习项目：代码保持简洁，实验记录保留实际结果。
 
-A small decoder-only Transformer that learns next-character prediction from real Chinese text, saves model checkpoints, and generates text. Causal multi-head attention, feed-forward networks, Pre-Norm residual decoder blocks, and the complete GPT model are implemented with basic PyTorch components.
+A small character-level decoder-only Transformer implemented from scratch and trained locally. This learning project grew from basic components into training on real Chinese novels, with readable code and actual experiment results.
 
-当前语料是简体版《孽海花》，已完成一次本机 CUDA 50,000 步训练。模型能生成带有小说词汇和对话形式的文字，但句子仍有明显的语义错误，不能视为成熟的文本生成模型。
+**当前成果 / Current result:** 简体《春明外史》、899,430 个字符、约 158 万参数，完成 CUDA **200,000 步**训练，最终 `train_loss=2.4915`、`eval_loss=2.1841`，支持逐字生成。
 
-The current corpus is a Simplified Chinese edition of *Nie Hai Hua* (《孽海花》). One local training run of 50,000 steps on CUDA has been completed. The model produces vocabulary and dialogue patterns resembling the novel, but its sentences still contain clear semantic errors. It is not a mature text generation model.
+The current model completed **200,000 CUDA training steps** on 899,430 characters of Simplified Chinese *Chunming Waishi*, with about 1.58 million parameters. Final losses are `train_loss=2.4915` and `eval_loss=2.1841`. Generated characters appear one at a time.
 
-## 运行 / Running the Project
+## 实现内容 / Implementation
 
-需要 Python 3.10+ 和 PyTorch。在项目目录和自己的 Python 环境中运行：
+- 字符级 tokenizer、随机 batch、右移一位的 next-token 目标 / Character tokenizer, random batches, and next-token targets.
+- 可学习的 token 与 position embedding / Learned token and position embeddings.
+- 手写 causal multi-head self-attention / Explicit causal multi-head self-attention.
+- GELU FFN、Pre-Norm、残差连接与堆叠 Decoder blocks / GELU feed-forward networks, Pre-Norm, residual connections, and stacked decoder blocks.
+- Cross entropy、反向传播与 AdamW / Cross-entropy loss, backpropagation, and AdamW.
+- checkpoint 保存与加载、greedy 和 temperature 采样 / Checkpoint saving/loading, greedy decoding, and temperature sampling.
+- 有 CUDA 时自动使用 GPU，否则使用 CPU / Automatic CUDA selection with CPU fallback.
 
-Requires Python 3.10+ and PyTorch. Run the following commands from the project directory in your Python environment:
+## 实验历程 / Experiment History
 
-```bash
-pip install -r requirements.txt
+### 起点：先跑通完整流程 / Starting Point: An End-to-End Run
 
-# 快速检查训练流程，单独保存以保留已有的 latest.pt
-# Run a short training check without overwriting an existing latest.pt
-python train.py --steps 50 --checkpoint checkpoints/smoke.pt
+最初用小规模自备中文文本，确认“读入文本 → 编码 → batch → 模型 → loss → 参数更新 → 保存 → 生成”能完整运行。随后换成真实小说，观察模型规模、上下文长度和语料对训练及生成的影响。
 
-# 按当前默认配置训练 50,000 步
-# Train for 50,000 steps with the current default configuration
-python train.py
+The project started with a small custom Chinese corpus to verify the complete pipeline: text loading, encoding, batching, modeling, loss, parameter updates, saving, and generation. Later experiments used full novels to explore changes in model size, context length, and corpus.
 
-# 从当前 checkpoint 生成，默认提示词为“第四回”
-# Generate from the current checkpoint; the default prompt is "第四回"
-python generate.py
-python generate.py --prompt 第四回 --max-new-tokens 100 --temperature 1.0
-python generate.py --prompt 第四回 --max-new-tokens 100 --greedy
-```
+### 三次小说训练 / Three Novel Training Experiments
 
-程序自动使用可用的 CUDA，否则使用 CPU。`--data` 可以指定其他 UTF-8 文本，`--checkpoint` 可以指定保存或加载路径。每次运行 `train.py` 都从随机权重开始训练，默认会覆盖 `checkpoints/latest.pt`。
+| 实验 / Run | 语料 / Corpus | 字符 / Characters | 上下文 / Context | 隐藏维度 / Width | 头 / Heads | 层 / Layers | Dropout | 参数 / Parameters | 步数 / Steps | 最终 train / eval loss |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| A：基础模型 / Baseline | 《孽海花》 / Nie Hai Hua | 254,222 | 32 | 64 | 4 | 2 | 0.0 | 629,883 | 50,000 | 3.7610 / 3.8021 |
+| B：扩大模型 / Larger model | 《孽海花》 / Nie Hai Hua | 254,222 | 128 | 128 | 4 | 3 | 0.1 | 1,662,843 | 50,000 | 2.2395 / 1.8148 |
+| C：白话长语料 / Vernacular corpus | 《春明外史》 / Chunming Waishi | 899,430 | 128 | 128 | 4 | 3 | 0.1 | 1,578,804 | 200,000 | 2.4915 / 2.1841 |
 
-The program uses CUDA when available and otherwise runs on the CPU. Use `--data` to select another UTF-8 corpus and `--checkpoint` to select a save or load path. Each run of `train.py` starts from random weights and overwrites `checkpoints/latest.pt` by default.
+**A：** 用较小模型训练真实小说。loss 持续下降，生成中出现小说词汇、人物名和对话标点，但句子经常不连贯。
 
-checkpoint 保存模型权重、配置、字符表和训练步数，可用于加载模型和生成；没有保存优化器状态，也没有实现断点续训入口。`checkpoints/` 已被 Git 忽略，GitHub 仓库不包含训练权重。从仓库克隆后，需要先训练，或自行放入相匹配的 checkpoint。
+**A:** The smaller model learned novel vocabulary, names, and dialogue punctuation as loss decreased, but generated sentences were often incoherent.
 
-A checkpoint stores model weights, configuration, the character vocabulary, and the training step count. It supports loading the model for generation, but does not store optimizer state, and the training script does not support resuming a run. The `checkpoints/` directory is ignored by Git, so trained weights are not included in the GitHub repository. After cloning, train a model or supply a compatible checkpoint.
+**B：** 在同一语料上将上下文从 32 增至 128、隐藏维度从 64 增至 128、Decoder blocks 从 2 增至 3，并启用 0.1 dropout。训练 50,000 步后，训练文本上的平均 loss 明显降低。
 
-字符表从训练文本构建并写入 checkpoint。提示词中的字符必须出现在该 checkpoint 的词表中。替换语料后应重新训练；生成时使用 checkpoint 中保存的词表与结构配置。
+**B:** On the same corpus, context grew from 32 to 128, hidden width from 64 to 128, and decoder depth from 2 to 3, with dropout of 0.1. After 50,000 steps, average loss on the training corpus was substantially lower.
 
-The character vocabulary is built from the training corpus and saved in the checkpoint. Every character in a prompt must exist in that checkpoint's vocabulary. Retrain after replacing the corpus; generation uses the vocabulary and architecture configuration stored in the checkpoint.
+**C：** 为学习白话表达，改用完整简体《春明外史》，从头训练 200,000 步。模型结构沿用 B；字符词表从 4,091 变为 3,764，因此 embedding 和输出层的参数量也随之减少。最后加入逐字输出，让每个新字符生成后立即显示。
 
-## 当前训练语料 / Current Training Corpus
+**C:** The corpus changed to the complete Simplified Chinese *Chunming Waishi* for vernacular prose, followed by 200,000 steps of training from scratch. Architecture stayed the same as B. Vocabulary decreased from 4,091 to 3,764 characters, reducing embedding and output-layer parameter counts. Character-by-character output was added to display each newly generated character immediately.
 
-`data/train.txt` 是曾朴的《孽海花》，来源为 [Project Gutenberg，电子书 25128 / eBook 25128](https://www.gutenberg.org/ebooks/25128)。使用该版本全部 35 回，经 OpenCC 繁转简，并清理网站说明、排版空格和段落内的硬换行。
+### 关键损失记录 / Selected Loss Records
 
-`data/train.txt` contains *Nie Hai Hua* by Zeng Pu, downloaded from Project Gutenberg, eBook 25128. All 35 chapters of the source edition are included. The text was converted from Traditional to Simplified Chinese with OpenCC, and website boilerplate, layout spaces, and hard line breaks within paragraphs were removed.
+数据来自用户提供的终端日志。下面只选取里程碑，不补写缺失的训练记录；C 的本次附件提供了 162,000–200,000 步的末段日志。
 
-| 项目 / Item | 数值 / Value |
-| --- | --- |
-| 正文汉字数 / Chinese characters in the novel | 216,777 |
-| 字符数（含标点、换行等）/ Total characters, including punctuation and line breaks | 254,222 |
-| 字符词表大小 / Character vocabulary size | 4,091 |
-| 章节数 / Chapters | 35 |
-| 文件编码与文字 / Encoding and script | UTF-8，简体中文 / Simplified Chinese |
+Values come from terminal logs supplied by the user. Only selected milestones are shown; missing records are not reconstructed. The latest attachment covers the final 162,000–200,000 steps of C.
 
-来源、处理过程与统计见 [data/SOURCE.md](data/SOURCE.md)，原始下载文本的许可页脚见 [data/LICENSE-gutenberg.txt](data/LICENSE-gutenberg.txt)。来源提供的版本与其他出版版本可能有差异。
+| 实验 / Run | Step | train_loss | eval_loss |
+| --- | ---: | ---: | ---: |
+| A | 1 | 8.4570 | 8.4632 |
+| A | 5,000 | 5.0525 | 4.9422 |
+| A | 20,000 | 4.1591 | 4.2419 |
+| A | 50,000 | 3.7610 | 3.8021 |
+| B | 1 | 8.4597 | 8.4427 |
+| B | 1,000 | 5.3095 | 5.2278 |
+| B | 5,000 | 4.5476 | 4.0460 |
+| B | 50,000 | 2.2395 | 1.8148 |
+| C | 162,000 | 2.4168 | 2.2658 |
+| C | 175,000 | 2.4678 | 2.2304 |
+| C | 190,000 | 2.5351 | 2.2071 |
+| C | 200,000 | 2.4915 | 2.1841 |
 
-See `data/SOURCE.md` for provenance, preprocessing, and corpus statistics, and `data/LICENSE-gutenberg.txt` for the license footer from the original download. The source edition may differ from other published editions.
+`train_loss` 是当前训练 batch 的损失；`eval_loss` 是模型关闭 dropout 后，从**同一份训练文本**随机抽取 20 个 batch 的平均损失，没有独立验证集。两者使用的样本与 dropout 状态不同，所以 eval loss 可以低于 train loss。它们反映对训练语料的拟合程度，不代表对未见文本的泛化能力。
 
-## 当前配置 / Current Configuration
+`train_loss` measures the current training batch. `eval_loss` averages 20 random batches from **the same training corpus**, with dropout disabled; there is no separate validation set. Different samples and dropout settings mean eval loss can be lower than train loss. These metrics describe fit to the corpus rather than generalization to unseen text.
 
-| 参数 / Parameter | 数值 / Value | 含义 / Description |
-| --- | --- | --- |
-| `block_size` | 32 | 每次可见的上下文长度 / Context length in characters |
-| `n_embd` | 64 | 每个字符的隐藏向量维度 / Hidden dimension per character |
-| `n_head` | 4 | 注意力头数，每头 16 维 / Attention heads, 16 dimensions per head |
-| `n_layer` | 2 | Decoder block 层数 / Number of decoder blocks |
-| `dropout` | 0.0 | 当前不丢弃输出 / Dropout disabled |
-| `batch_size` | 16 | 每次更新使用的文本片段数 / Text sequences per parameter update |
-| `max_steps` | 50,000 | 默认参数更新次数 / Default number of parameter updates |
-| `eval_interval` | 250 | 平均 loss 的输出间隔 / Interval between average loss reports |
-| `eval_batches` | 20 | 每次估计平均 loss 的 batch 数 / Batches per average loss estimate |
-| `learning_rate` | 0.0003 | AdamW 学习率 / AdamW learning rate |
-| `seed` | 42 | 随机种子 / Random seed |
+A 与 B 的同语料结果可作为本项目内的实验观察，但并非严格控制变量的评测；C 更换了语料及词表，不能凭最终 loss 直接判断它优于或劣于 B。
 
-本次记录中的模型参数量为 **629,883**。每个训练 batch 的输入和目标形状都是 `[16, 32]`，logits 形状是 `[16, 32, 4091]`。
+A and B provide observations on the same corpus, rather than a controlled benchmark. C uses a different corpus and vocabulary, so its final loss cannot directly rank it against B.
 
-The recorded model has **629,883 parameters**. Training inputs and targets both have shape `[16, 32]`, and logits have shape `[16, 32, 4091]`.
+## 实际生成样例 / Actual Generated Samples
 
-## 本机训练记录 / Local Training Results
+以下均来自用户真实终端输出，保留原有错误，不润色。输出包含提示词；生成文本保留中文，不作翻译。随机采样的再次运行结果可能不同。
 
-以下记录来自用户提供的真实终端输出：运行 `python train.py`，使用 CUDA 训练 50,000 步，并保存为 `checkpoints/latest.pt`。
+These samples are taken from the user's actual terminal output, including prompts and original errors. Generated text is kept in Chinese without editing or translation. Random sampling may produce different results on another run.
 
-The following records come from actual terminal output supplied by the user: `python train.py` was run on CUDA for 50,000 steps, saving the checkpoint to `checkpoints/latest.pt`.
+### 基础模型 A / Baseline A
 
-`train_loss` 是当前训练 batch 的损失；`eval_loss` 是从同一份训练文本随机抽取 20 个 batch 得到的平均损失。当前没有独立验证集，不能用这些数字判断对新文本的泛化能力。抽样 loss 会波动，不要求每次打印都下降。
-
-`train_loss` is the loss on the current training batch. `eval_loss` is the average loss over 20 batches randomly sampled from the same training corpus. There is no separate validation set, so these values do not measure generalization to unseen text. Sampled losses fluctuate and do not necessarily decrease at every report.
-
-| 步数 / Step | train_loss | eval_loss |
-| --- | --- | --- |
-| 1 | 8.4570 | 8.4632 |
-| 1,000 | 5.6489 | 5.8750 |
-| 5,000 | 5.0525 | 4.9422 |
-| 10,000 | 4.5305 | 4.5837 |
-| 20,000 | 4.1591 | 4.2419 |
-| 30,000 | 3.9562 | 4.0618 |
-| 40,000 | 3.9804 | 3.9121 |
-| 50,000 | 3.7610 | 3.8021 |
-
-<details>
-<summary>展开完整训练日志（201 次 loss 输出）/ Expand the full training log (201 loss reports)</summary>
-
-```text
-device=cuda characters=254222 vocab=4091 parameters=629,883
-step=1 train_loss=8.4570 eval_loss=8.4632
-step=250 train_loss=6.1606 eval_loss=6.3212
-step=500 train_loss=6.2958 eval_loss=6.2277
-step=750 train_loss=6.2324 eval_loss=6.0217
-step=1000 train_loss=5.6489 eval_loss=5.8750
-step=1250 train_loss=5.7708 eval_loss=5.7822
-step=1500 train_loss=5.6425 eval_loss=5.6690
-step=1750 train_loss=5.3924 eval_loss=5.6076
-step=2000 train_loss=5.4027 eval_loss=5.5283
-step=2250 train_loss=5.4121 eval_loss=5.4302
-step=2500 train_loss=5.6412 eval_loss=5.4193
-step=2750 train_loss=5.2930 eval_loss=5.3841
-step=3000 train_loss=5.1288 eval_loss=5.2411
-step=3250 train_loss=5.2908 eval_loss=5.2607
-step=3500 train_loss=4.9659 eval_loss=5.1593
-step=3750 train_loss=4.8411 eval_loss=5.1168
-step=4000 train_loss=5.2359 eval_loss=5.0725
-step=4250 train_loss=4.9500 eval_loss=5.0944
-step=4500 train_loss=4.8712 eval_loss=5.0743
-step=4750 train_loss=5.0325 eval_loss=5.0096
-step=5000 train_loss=5.0525 eval_loss=4.9422
-step=5250 train_loss=5.0887 eval_loss=4.9745
-step=5500 train_loss=5.2152 eval_loss=4.8870
-step=5750 train_loss=4.9759 eval_loss=4.9399
-step=6000 train_loss=5.0434 eval_loss=4.7862
-step=6250 train_loss=4.8934 eval_loss=4.9124
-step=6500 train_loss=4.6499 eval_loss=4.8394
-step=6750 train_loss=5.0197 eval_loss=4.7750
-step=7000 train_loss=4.7808 eval_loss=4.7876
-step=7250 train_loss=4.6194 eval_loss=4.7472
-step=7500 train_loss=4.8013 eval_loss=4.7518
-step=7750 train_loss=4.7728 eval_loss=4.7005
-step=8000 train_loss=4.4971 eval_loss=4.7427
-step=8250 train_loss=4.7136 eval_loss=4.7199
-step=8500 train_loss=4.5423 eval_loss=4.6993
-step=8750 train_loss=4.7626 eval_loss=4.6867
-step=9000 train_loss=5.0419 eval_loss=4.6524
-step=9250 train_loss=4.3186 eval_loss=4.5349
-step=9500 train_loss=4.5131 eval_loss=4.6734
-step=9750 train_loss=4.7173 eval_loss=4.6138
-step=10000 train_loss=4.5305 eval_loss=4.5837
-step=10250 train_loss=4.6513 eval_loss=4.5765
-step=10500 train_loss=4.8558 eval_loss=4.6432
-step=10750 train_loss=4.5252 eval_loss=4.6088
-step=11000 train_loss=4.4684 eval_loss=4.5387
-step=11250 train_loss=4.6573 eval_loss=4.5540
-step=11500 train_loss=4.7411 eval_loss=4.5250
-step=11750 train_loss=4.4195 eval_loss=4.5647
-step=12000 train_loss=4.5202 eval_loss=4.4884
-step=12250 train_loss=4.2189 eval_loss=4.4765
-step=12500 train_loss=4.5337 eval_loss=4.4490
-step=12750 train_loss=4.3196 eval_loss=4.4314
-step=13000 train_loss=4.3029 eval_loss=4.4418
-step=13250 train_loss=4.4954 eval_loss=4.4310
-step=13500 train_loss=4.1387 eval_loss=4.4173
-step=13750 train_loss=4.3897 eval_loss=4.4591
-step=14000 train_loss=4.4987 eval_loss=4.3505
-step=14250 train_loss=4.6306 eval_loss=4.3492
-step=14500 train_loss=4.6628 eval_loss=4.4583
-step=14750 train_loss=4.5514 eval_loss=4.4097
-step=15000 train_loss=4.4332 eval_loss=4.3873
-step=15250 train_loss=4.3789 eval_loss=4.3655
-step=15500 train_loss=4.2478 eval_loss=4.4328
-step=15750 train_loss=4.5200 eval_loss=4.4235
-step=16000 train_loss=4.6039 eval_loss=4.3177
-step=16250 train_loss=4.3562 eval_loss=4.3520
-step=16500 train_loss=4.3266 eval_loss=4.3111
-step=16750 train_loss=4.3863 eval_loss=4.3691
-step=17000 train_loss=4.4205 eval_loss=4.2689
-step=17250 train_loss=4.3949 eval_loss=4.3148
-step=17500 train_loss=4.1528 eval_loss=4.2785
-step=17750 train_loss=4.3692 eval_loss=4.2721
-step=18000 train_loss=4.0816 eval_loss=4.3623
-step=18250 train_loss=4.2626 eval_loss=4.2787
-step=18500 train_loss=4.4358 eval_loss=4.2312
-step=18750 train_loss=4.0598 eval_loss=4.3240
-step=19000 train_loss=4.4618 eval_loss=4.2514
-step=19250 train_loss=4.2967 eval_loss=4.2593
-step=19500 train_loss=4.0440 eval_loss=4.2354
-step=19750 train_loss=4.2732 eval_loss=4.2342
-step=20000 train_loss=4.1591 eval_loss=4.2419
-step=20250 train_loss=4.2840 eval_loss=4.2697
-step=20500 train_loss=4.0983 eval_loss=4.2332
-step=20750 train_loss=4.2407 eval_loss=4.2063
-step=21000 train_loss=4.2523 eval_loss=4.2611
-step=21250 train_loss=3.9012 eval_loss=4.2371
-step=21500 train_loss=4.0790 eval_loss=4.2794
-step=21750 train_loss=4.0636 eval_loss=4.2172
-step=22000 train_loss=4.2968 eval_loss=4.1709
-step=22250 train_loss=4.2722 eval_loss=4.2027
-step=22500 train_loss=4.0920 eval_loss=4.2098
-step=22750 train_loss=4.1484 eval_loss=4.1702
-step=23000 train_loss=4.0535 eval_loss=4.2247
-step=23250 train_loss=4.1880 eval_loss=4.1810
-step=23500 train_loss=3.9265 eval_loss=4.1803
-step=23750 train_loss=4.2172 eval_loss=4.1895
-step=24000 train_loss=4.0370 eval_loss=4.0885
-step=24250 train_loss=4.1062 eval_loss=4.1284
-step=24500 train_loss=4.2197 eval_loss=4.0916
-step=24750 train_loss=4.1961 eval_loss=4.0984
-step=25000 train_loss=4.1020 eval_loss=4.1642
-step=25250 train_loss=4.3331 eval_loss=4.1586
-step=25500 train_loss=4.2102 eval_loss=4.1571
-step=25750 train_loss=4.2569 eval_loss=4.1536
-step=26000 train_loss=4.1402 eval_loss=4.0605
-step=26250 train_loss=4.2093 eval_loss=4.0930
-step=26500 train_loss=3.9338 eval_loss=4.0615
-step=26750 train_loss=4.1066 eval_loss=4.1311
-step=27000 train_loss=3.8246 eval_loss=4.1098
-step=27250 train_loss=4.1873 eval_loss=4.0235
-step=27500 train_loss=4.2530 eval_loss=4.0403
-step=27750 train_loss=4.1121 eval_loss=4.0917
-step=28000 train_loss=3.8069 eval_loss=4.0508
-step=28250 train_loss=4.1067 eval_loss=4.1100
-step=28500 train_loss=4.2340 eval_loss=4.0027
-step=28750 train_loss=3.7413 eval_loss=4.0559
-step=29000 train_loss=3.9977 eval_loss=4.0419
-step=29250 train_loss=4.0182 eval_loss=4.0897
-step=29500 train_loss=4.1050 eval_loss=4.0783
-step=29750 train_loss=4.2055 eval_loss=4.0851
-step=30000 train_loss=3.9562 eval_loss=4.0618
-step=30250 train_loss=3.8064 eval_loss=4.0744
-step=30500 train_loss=3.9975 eval_loss=4.0332
-step=30750 train_loss=4.0126 eval_loss=4.0248
-step=31000 train_loss=4.1599 eval_loss=4.0370
-step=31250 train_loss=4.0336 eval_loss=4.0042
-step=31500 train_loss=3.8763 eval_loss=4.0076
-step=31750 train_loss=3.8954 eval_loss=3.9932
-step=32000 train_loss=3.8867 eval_loss=3.9394
-step=32250 train_loss=3.9177 eval_loss=4.0711
-step=32500 train_loss=4.2831 eval_loss=4.0116
-step=32750 train_loss=4.1230 eval_loss=3.9905
-step=33000 train_loss=4.0689 eval_loss=4.0414
-step=33250 train_loss=3.7700 eval_loss=3.9810
-step=33500 train_loss=4.1762 eval_loss=4.0266
-step=33750 train_loss=4.0812 eval_loss=3.9666
-step=34000 train_loss=4.0103 eval_loss=3.9482
-step=34250 train_loss=4.0854 eval_loss=4.0223
-step=34500 train_loss=3.9075 eval_loss=4.0098
-step=34750 train_loss=4.0725 eval_loss=3.9209
-step=35000 train_loss=4.0804 eval_loss=3.9831
-step=35250 train_loss=4.1724 eval_loss=3.9551
-step=35500 train_loss=3.9746 eval_loss=3.9467
-step=35750 train_loss=3.9673 eval_loss=3.9973
-step=36000 train_loss=4.1374 eval_loss=3.9123
-step=36250 train_loss=3.6808 eval_loss=3.9490
-step=36500 train_loss=3.9104 eval_loss=3.9458
-step=36750 train_loss=3.7279 eval_loss=3.9993
-step=37000 train_loss=4.2736 eval_loss=3.9519
-step=37250 train_loss=3.9015 eval_loss=3.9735
-step=37500 train_loss=3.8834 eval_loss=3.9986
-step=37750 train_loss=3.7406 eval_loss=3.9069
-step=38000 train_loss=3.9844 eval_loss=3.9477
-step=38250 train_loss=3.8575 eval_loss=3.9250
-step=38500 train_loss=3.9957 eval_loss=3.8740
-step=38750 train_loss=3.8169 eval_loss=3.9218
-step=39000 train_loss=3.9696 eval_loss=3.9255
-step=39250 train_loss=4.0914 eval_loss=3.9304
-step=39500 train_loss=4.0042 eval_loss=3.8941
-step=39750 train_loss=3.8626 eval_loss=3.9074
-step=40000 train_loss=3.9804 eval_loss=3.9121
-step=40250 train_loss=3.7502 eval_loss=3.9256
-step=40500 train_loss=3.8769 eval_loss=3.9049
-step=40750 train_loss=3.9129 eval_loss=3.8718
-step=41000 train_loss=4.0074 eval_loss=3.7992
-step=41250 train_loss=3.8658 eval_loss=3.9151
-step=41500 train_loss=3.9830 eval_loss=3.8776
-step=41750 train_loss=4.0780 eval_loss=3.9163
-step=42000 train_loss=3.9090 eval_loss=3.8379
-step=42250 train_loss=4.0298 eval_loss=3.8512
-step=42500 train_loss=3.7669 eval_loss=3.9424
-step=42750 train_loss=3.7348 eval_loss=3.9201
-step=43000 train_loss=4.0921 eval_loss=3.9123
-step=43250 train_loss=3.7958 eval_loss=3.8604
-step=43500 train_loss=3.8800 eval_loss=3.8956
-step=43750 train_loss=3.6784 eval_loss=3.8941
-step=44000 train_loss=3.7776 eval_loss=3.8647
-step=44250 train_loss=3.9645 eval_loss=3.8445
-step=44500 train_loss=3.6928 eval_loss=3.8353
-step=44750 train_loss=3.9790 eval_loss=3.8830
-step=45000 train_loss=3.7655 eval_loss=3.8684
-step=45250 train_loss=3.7776 eval_loss=3.8405
-step=45500 train_loss=4.1679 eval_loss=3.7713
-step=45750 train_loss=3.4515 eval_loss=3.8551
-step=46000 train_loss=3.9146 eval_loss=3.8775
-step=46250 train_loss=3.8387 eval_loss=3.8841
-step=46500 train_loss=4.0137 eval_loss=3.8047
-step=46750 train_loss=3.7707 eval_loss=3.7944
-step=47000 train_loss=3.7633 eval_loss=3.8452
-step=47250 train_loss=3.8383 eval_loss=3.7837
-step=47500 train_loss=3.7867 eval_loss=3.8798
-step=47750 train_loss=3.7197 eval_loss=3.7991
-step=48000 train_loss=3.8548 eval_loss=3.8361
-step=48250 train_loss=3.7890 eval_loss=3.8126
-step=48500 train_loss=4.0613 eval_loss=3.8169
-step=48750 train_loss=3.7657 eval_loss=3.8136
-step=49000 train_loss=3.8963 eval_loss=3.8313
-step=49250 train_loss=3.9444 eval_loss=3.8001
-step=49500 train_loss=3.8139 eval_loss=3.8291
-step=49750 train_loss=3.9549 eval_loss=3.7725
-step=50000 train_loss=3.7610 eval_loss=3.8021
-checkpoint=checkpoints/latest.pt
-```
-
-checkpoint 路径使用项目相对路径展示，其余训练数值与原始记录一致。
-
-The checkpoint path is shown relative to the project directory. All other training values are unchanged from the original record.
-
-</details>
-
-## 实际生成结果 / Actual Generated Samples
-
-以下两次输出摘自同一份终端记录，提示词为 `第四回`。当时直接运行 `generate.py`，使用默认 temperature 1.0 随机采样，生成 100 个新字符；输出包含原提示词。随机采样没有设置固定种子，再次运行不保证逐字相同。示例保留实际错误，没有润色。
-
-The two samples below come from the same terminal record, using the prompt `第四回` ("Chapter Four"). Running `generate.py` with its defaults sampled 100 new characters at temperature 1.0; the output includes the original prompt. Sampling used no fixed seed, so another run may produce different text. Errors are preserved as generated, without editing.
-
-生成正文保留中文原始输出，不作翻译，以忠实展示模型的实际结果。
-
-The generated text is kept in its original Chinese without translation to preserve the model's actual output.
-
-第一次 / Sample 1:
+提示词 / Prompt：`第四回`
 
 ```text
 第四回请训罢，一坐半晌，白坐在前面上，一个红三绿色，锦吟道：「还要的挚日，哪里是黑旗将军火的呢？我们做得令，没有所问你去刚赴理也深，实在大家未足。这一天，我也决定说的。」一个何安道：「死妓街的主意发？你们不
 ```
 
-第二次 / Sample 2:
+### 当前模型 C / Current Model C
+
+输出开头 / Output beginning：`过了几日`
 
 ```text
-第四回南洋的猛，老爷午后没起来，叫那车门生。」雯青因道：「别碎乐呀！」美菽素里头问道：「克先请俄、德国天消息下诸位分子。」小燕道：「照这班广东图事业，目瞪起酒醒来。」小燕道：「何听他空著，𫉁云也里只剩她的老
+过了几日云雨了。再要到医院里去诊病，不能久等，也就回来，请医生在报馆里来。到了那些医生送来，一走过来，不四五分钟，满每想过我明天就买主会饭碗一碗饭。”
+
+这时何太太心里早要问，只好忽然一动，一个早到了晚上，他
 ```
 
-可以观察到小说人物名、对话标点和部分句式，但上下文与含义仍不稳定。当前上下文只有 32 个字符，模型规模也很小，loss 下降不等于已经学会写连贯故事。
+输出开头 / Output beginning：`你好`
 
-The output contains character names, dialogue punctuation, and some sentence patterns from the novel, but its meaning and continuity remain unreliable. The context window is only 32 characters, and the model is small. A lower loss does not mean it has learned to write coherent stories.
+```text
+你好办了一个军官，你是可以去看看的，可是现在……”
 
-## 文件 / Project Files
+李老太太站在里，手里拿着两只手，叫了一声“回来”，叫我打开保险箱子吗？再一看打扑克，捏住了。当他出去，倒是填不了的，翻出一只手来。口里将门一推，在门口
+```
+
+当前模型能生成较明显的白话对话和局部句式，但人物、动作、逻辑及长距离情节仍不稳定。这是仅在一本小说上训练的下一字符预测模型，没有进行指令微调；输入“你好”或一段要求，并不意味着它会按聊天助手的方式回答。项目到这里完成了本阶段的学习与实验记录。
+
+The current model produces vernacular dialogue and some local sentence patterns, but characters, actions, logic, and longer story continuity remain unreliable. It predicts the next character after training on one novel and has not been instruction-tuned; a greeting or request does not make it behave as a chat assistant. This repository records the completed learning and experiments for this stage.
+
+## 运行 / Running
+
+需要 Python 3.10+ 和 PyTorch。在项目目录和自己的 Python 环境中运行：
+
+Requires Python 3.10+ and PyTorch. Run from the project directory in your Python environment:
+
+```bash
+pip install -r requirements.txt
+
+# 从随机权重训练，默认 200,000 步 / Train from scratch, default 200,000 steps
+python train.py
+
+# 默认提示词“你好”，生成 100 个新字符 / Default prompt: 你好; 100 new characters
+python generate.py
+
+# 指定提示词和长度 / Set prompt and output length
+python generate.py --prompt 杨杏园 --max-new-tokens 300 --temperature 0.8
+
+# 贪心生成 / Greedy generation
+python generate.py --prompt 杨杏园 --greedy
+
+# 调整逐字显示间隔（秒）/ Adjust delay between characters (seconds)
+python generate.py --delay 0.1
+python generate.py --delay 0
+```
+
+`generate.py` 每生成一个新字符就立即打印并刷新输出，默认额外间隔 0.03 秒；`--delay 0` 取消额外等待，仍然逐字输出。这个参数只改变显示节奏，不改变采样概率。
+
+`generate.py` prints and flushes each newly generated character, with an additional delay of 0.03 seconds by default. `--delay 0` removes the pause while retaining immediate character output. This option changes display timing, not sampling probabilities.
+
+有 CUDA 时训练和生成自动使用 GPU，否则使用 CPU。`--data` 指定其他 UTF-8 训练文件，`--steps` 覆盖训练步数，`--checkpoint` 指定模型路径；默认路径是 `checkpoints/latest.pt`。
+
+Training and generation select CUDA when available and otherwise use CPU. `--data` selects another UTF-8 training file, `--steps` overrides the training step count, and `--checkpoint` sets the model path. The default checkpoint is `checkpoints/latest.pt`.
+
+**每次运行 `train.py` 都从随机权重开始，训练结束才保存，并覆盖所指定的 checkpoint。** 当前保存模型权重、配置、字符表和步数；未保存优化器状态，也没有断点续训入口。生成使用 checkpoint 内的词表及模型配置，提示词不能包含该词表以外的字符。
+
+**Each invocation of `train.py` starts from random weights and saves only at completion, overwriting the selected checkpoint.** It stores weights, configuration, character vocabulary, and step count, but not optimizer state; there is no training-resume interface. Generation uses the checkpoint's vocabulary and architecture, and prompts must contain only characters in that vocabulary.
+
+`checkpoints/` 由 Git 忽略，本仓库不上传训练权重。克隆后需要先训练，或放入与代码匹配的 checkpoint，再运行生成。
+
+`checkpoints/` is ignored by Git, so trained weights are not uploaded. After cloning, train a model or supply a compatible checkpoint before generation.
+
+## 当前语料 / Current Corpus
+
+`data/train.txt` 是张恨水的简体《春明外史》，来自[虚阁网全文](https://www.xuges.com/xdmj/zhs/cmws/index.htm)。保留第 1–86 回正文，移除网页导航、脚本、缩进与序言，用 OpenCC 转为简体，UTF-8 保存；未重复或补写正文。
+
+`data/train.txt` contains all 86 chapters of Zhang Henshui's *Chunming Waishi*, from the linked online text. Navigation, scripts, indentation, and prefaces were removed. OpenCC converted it to Simplified Chinese, saved as UTF-8, with no repetition or invented additions.
+
+| 项目 / Item | 数值 / Value |
+| --- | ---: |
+| 总字符（含标点、换行）/ Total characters, including punctuation and newlines | 899,430 |
+| 汉字 / Han characters | 738,250 |
+| 字符词表 / Vocabulary | 3,764 |
+| 章节 / Chapters | 86 |
+
+这是一部民国白话小说，仍有少量诗词及旧式表达。约 90 万总字符与纯汉字数采用不同统计口径。来源、预处理、原作版权信息和 SHA-256 见 [data/SOURCE.md](data/SOURCE.md)。旧实验 A/B 使用 [Project Gutenberg 的《孽海花》版本](https://www.gutenberg.org/ebooks/25128)，35 回、4,091 字符词表；当前训练文件已替换为新语料。
+
+This is vernacular Republican-era fiction with some poetry and period expressions. Total character counts and Han-only counts differ. See [data/SOURCE.md](data/SOURCE.md) for provenance, preprocessing, original-work copyright information, and SHA-256. Earlier runs A/B used the linked Project Gutenberg edition of *Nie Hai Hua*, with 35 chapters and a 4,091-character vocabulary. The current training file contains the new corpus.
+
+## 当前配置 / Current Configuration
+
+| 参数 / Parameter | 值 / Value | 含义 / Meaning |
+| --- | ---: | --- |
+| `block_size` | 128 | 上下文字符数 / Context length |
+| `n_embd` | 128 | 隐藏维度 / Hidden width |
+| `n_head` | 4 | 每头 32 维 / 32 dimensions per head |
+| `n_layer` | 3 | Decoder blocks |
+| `dropout` | 0.1 | 丢弃概率 / Dropout probability |
+| `batch_size` | 16 | 每次更新的片段数 / Sequences per update |
+| `max_steps` | 200,000 | 总更新次数 / Total updates |
+| `eval_interval` | 250 | 平均 loss 输出间隔 / Loss reporting interval |
+| `eval_batches` | 20 | 每次平均 loss 的 batch 数 / Batches per loss estimate |
+| `learning_rate` | 0.0003 | AdamW 学习率 / AdamW learning rate |
+| `seed` | 42 | 随机种子 / Random seed |
+
+当前模型 **1,578,804 参数**。输入与目标为 `[16,128]`，embedding 为 `[16,128,128]`，注意力权重为 `[16,4,128,128]`，logits 为 `[16,128,3764]`。
+
+The current model has **1,578,804 parameters**. Inputs and targets are `[16,128]`, embeddings `[16,128,128]`, attention weights `[16,4,128,128]`, and logits `[16,128,3764]`.
+
+## 文件与数据流 / Files and Data Flow
 
 | 文件 / File | 用途 / Purpose |
 | --- | --- |
-| `data/train.txt` | 简体《孽海花》训练语料 / Simplified Chinese novel corpus |
-| `data/SOURCE.md` | 语料来源、处理方法与统计 / Corpus provenance, preprocessing, and statistics |
-| `data/LICENSE-gutenberg.txt` | 原始下载文本的许可页脚 / License footer from the original download |
-| `tokenizer.py` | 字符与 token ID 互转 / Character-to-ID encoding and decoding |
-| `dataset.py` | 随机截取输入和右移一位的预测目标 / Random input sequences and targets shifted by one character |
-| `model.py` | Embedding、因果多头注意力、FFN、Pre-Norm Decoder blocks、GPT 和生成 / Embeddings, causal multi-head attention, FFN, Pre-Norm decoder blocks, GPT, and generation |
-| `config.py` | 模型结构与训练参数 / Model and training configuration |
-| `train.py` | Cross entropy、AdamW 训练、loss 输出和 checkpoint 保存 / Cross-entropy loss, AdamW training, loss reporting, and checkpoint saving |
-| `generate.py` | checkpoint 加载、贪心或 temperature 采样 / Checkpoint loading, greedy decoding, and temperature sampling |
+| `config.py` | 模型与训练参数 / Model and training settings |
+| `tokenizer.py` | 字符与 ID 互转 / Character-to-ID encoding and decoding |
+| `dataset.py` | 随机输入及右移目标 / Random inputs and shifted targets |
+| `model.py` | Embedding、Attention、FFN、Decoder blocks、GPT、采样 / Model components and sampling |
+| `train.py` | Loss、AdamW、训练循环及保存 / Loss, optimizer, training loop, and saving |
+| `generate.py` | 加载 checkpoint 并逐字输出 / Checkpoint loading and character-by-character output |
+| `data/train.txt` | 当前简体小说语料 / Current Simplified Chinese corpus |
+| `data/SOURCE.md` | 来源、处理和统计 / Provenance, processing, and statistics |
 
-## 一批数据的路径 / Batch Data Flow
+`文本 → 字符 ID → x/y（y 右移一位）→ token + position embedding → Decoder blocks → logits → cross entropy → backward → AdamW`
 
-`文本 → 字符 ID → x/y（目标 y 右移一位）→ token + position embedding → Decoder blocks → logits → cross entropy → 反向传播 → AdamW`
+`Text → character IDs → x/y (targets shifted by one character) → token + position embeddings → decoder blocks → logits → cross-entropy loss → backward → AdamW`
 
-`Text → character IDs → x/y (targets shifted by one character) → token + position embeddings → decoder blocks → logits → cross-entropy loss → backpropagation → AdamW`
+生成时，每一步只使用最后一个位置的 logits 选择下一字符，将它追加到输入，再继续预测；超出上下文长度时只保留最近 128 个字符参与计算。
 
-用 `B` 表示 batch size、`T` 表示序列长度、`C` 表示隐藏维度、`H` 表示头数、`V` 表示词表大小：输入与目标 `[B,T]`，embedding `[B,T,C]`，Q/K/V 拆头后 `[B,H,T,C/H]`，注意力权重 `[B,H,T,T]`，logits `[B,T,V]`。生成时，每一步只取最后一个位置的 logits 选择下一个字符，再把它接入上下文。
-
-Let `B` be batch size, `T` sequence length, `C` hidden dimension, `H` the number of heads, and `V` vocabulary size. Inputs and targets have shape `[B,T]`; embeddings `[B,T,C]`; Q/K/V after splitting into heads `[B,H,T,C/H]`; attention weights `[B,H,T,T]`; and logits `[B,T,V]`. During generation, the logits at the last position select the next character, which is then appended to the context.
+During generation, the last position's logits select the next character, which is appended before the next prediction. When context exceeds the limit, only the latest 128 characters enter the model.
