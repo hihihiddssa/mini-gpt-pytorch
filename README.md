@@ -1,22 +1,39 @@
-# Mini GPT From Scratch
+# mini-gpt-pytorch
 
-从零实现并在本机训练的小型字符级 Decoder-only Transformer。这是一个从基础组件走到真实中文小说训练的学习项目：代码保持简洁，实验记录保留实际结果。
+基于 PyTorch 搭建并训练的小型字符级 Decoder-only Transformer，覆盖因果多头自注意力、Pre-Norm 残差块、下一字符预测、模型保存加载和自回归生成。
 
-A small character-level decoder-only Transformer implemented from scratch and trained locally. This learning project grew from basic components into training on real Chinese novels, with readable code and actual experiment results.
+Built and trained a compact character-level Decoder-only Transformer in PyTorch, covering causal multi-head self-attention, residual Pre-Norm blocks, next-token prediction, checkpointing, and autoregressive generation.
 
-**当前成果 / Current result:** 简体《春明外史》、899,430 个字符、约 158 万参数，完成 CUDA **200,000 步**训练，最终 `train_loss=2.4915`、`eval_loss=2.1841`，支持逐字生成。
+项目以可读的模型代码和真实中文小说训练为核心，记录了从基础模型到扩大模型、再到白话长语料训练的三次实验。技术栈：Python、PyTorch、CUDA。
 
-The current model completed **200,000 CUDA training steps** on 899,430 characters of Simplified Chinese *Chunming Waishi*, with about 1.58 million parameters. Final losses are `train_loss=2.4915` and `eval_loss=2.1841`. Generated characters appear one at a time.
+The project combines readable model code with training on real Chinese novels. It records three experiments progressing from a baseline to a larger model and then a longer vernacular corpus. Stack: Python, PyTorch, and CUDA.
 
-## 实现内容 / Implementation
+## 核心实现 / Core Implementation
 
 - 字符级 tokenizer、随机 batch、右移一位的 next-token 目标 / Character tokenizer, random batches, and next-token targets.
 - 可学习的 token 与 position embedding / Learned token and position embeddings.
-- 手写 causal multi-head self-attention / Explicit causal multi-head self-attention.
+- 显式实现 causal multi-head self-attention / Explicit causal multi-head self-attention.
 - GELU FFN、Pre-Norm、残差连接与堆叠 Decoder blocks / GELU feed-forward networks, Pre-Norm, residual connections, and stacked decoder blocks.
 - Cross entropy、反向传播与 AdamW / Cross-entropy loss, backpropagation, and AdamW.
 - checkpoint 保存与加载、greedy 和 temperature 采样 / Checkpoint saving/loading, greedy decoding, and temperature sampling.
 - 有 CUDA 时自动使用 GPU，否则使用 CPU / Automatic CUDA selection with CPU fallback.
+
+## 当前成果 / Current Results
+
+| 项目 / Item | 结果 / Result |
+| --- | --- |
+| 模型 / Model | 字符级 Decoder-only Transformer / Character-level decoder-only Transformer |
+| 参数 / Parameters | 1,578,804 |
+| 语料 / Corpus | 简体《春明外史》，899,430 个字符 / Simplified Chinese Chunming Waishi, 899,430 characters |
+| 字符词表 / Vocabulary | 3,764 |
+| 上下文 / Context | 128 个字符 / 128 characters |
+| 训练 / Training | CUDA，200,000 步 / CUDA, 200,000 steps |
+| 最终损失 / Final loss | train: 2.4915; eval: 2.1841 |
+| 生成 / Generation | Greedy / temperature sampling，逐字输出 / Character-by-character output |
+
+模型可以延续小说中的词汇、对话形式和部分局部句式；生成样例与实验记录见下文。`eval_loss` 来自训练语料的抽样，不是独立验证集指标。
+
+The model reproduces novel vocabulary, dialogue forms, and some local sentence patterns. Actual samples and experiment records appear below. `eval_loss` is sampled from the training corpus, not a held-out validation metric.
 
 ## 实验历程 / Experiment History
 
@@ -48,9 +65,9 @@ The project started with a small custom Chinese corpus to verify the complete pi
 
 ### 关键损失记录 / Selected Loss Records
 
-数据来自用户提供的终端日志。下面只选取里程碑，不补写缺失的训练记录；C 的本次附件提供了 162,000–200,000 步的末段日志。
+以下来自实际训练终端记录，只展示关键里程碑。实验 C 保留的日志覆盖 162,000–200,000 步。
 
-Values come from terminal logs supplied by the user. Only selected milestones are shown; missing records are not reconstructed. The latest attachment covers the final 162,000–200,000 steps of C.
+The following values come from actual training terminal records, with only key milestones shown. The retained log for C covers steps 162,000–200,000.
 
 | 实验 / Run | Step | train_loss | eval_loss |
 | --- | ---: | ---: | ---: |
@@ -77,9 +94,9 @@ A and B provide observations on the same corpus, rather than a controlled benchm
 
 ## 实际生成样例 / Actual Generated Samples
 
-以下均来自用户真实终端输出，保留原有错误，不润色。输出包含提示词；生成文本保留中文，不作翻译。随机采样的再次运行结果可能不同。
+以下均来自真实终端输出，保留原有错误，不润色。输出包含提示词；生成文本保留中文，不作翻译。随机采样的再次运行结果可能不同。
 
-These samples are taken from the user's actual terminal output, including prompts and original errors. Generated text is kept in Chinese without editing or translation. Random sampling may produce different results on another run.
+These samples are taken from actual terminal output, including prompts and original errors. Generated text is kept in Chinese without editing or translation. Random sampling may produce different results on another run.
 
 ### 基础模型 A / Baseline A
 
@@ -107,23 +124,21 @@ These samples are taken from the user's actual terminal output, including prompt
 李老太太站在里，手里拿着两只手，叫了一声“回来”，叫我打开保险箱子吗？再一看打扑克，捏住了。当他出去，倒是填不了的，翻出一只手来。口里将门一推，在门口
 ```
 
-当前模型能生成较明显的白话对话和局部句式，但人物、动作、逻辑及长距离情节仍不稳定。这是仅在一本小说上训练的下一字符预测模型，没有进行指令微调；输入“你好”或一段要求，并不意味着它会按聊天助手的方式回答。项目到这里完成了本阶段的学习与实验记录。
-
-The current model produces vernacular dialogue and some local sentence patterns, but characters, actions, logic, and longer story continuity remain unreliable. It predicts the next character after training on one novel and has not been instruction-tuned; a greeting or request does not make it behave as a chat assistant. This repository records the completed learning and experiments for this stage.
-
-## 运行 / Running
+## 快速运行 / Quick Start
 
 需要 Python 3.10+ 和 PyTorch。在项目目录和自己的 Python 环境中运行：
 
 Requires Python 3.10+ and PyTorch. Run from the project directory in your Python environment:
 
 ```bash
+git clone https://github.com/hihihiddssa/mini-gpt-pytorch.git
+cd mini-gpt-pytorch
 pip install -r requirements.txt
 
 # 从随机权重训练，默认 200,000 步 / Train from scratch, default 200,000 steps
 python train.py
 
-# 默认提示词“你好”，生成 100 个新字符 / Default prompt: 你好; 100 new characters
+# 默认提示词“陈国英道：”，生成 100 个新字符 / Default prompt: 陈国英道：; 100 new characters
 python generate.py
 
 # 指定提示词和长度 / Set prompt and output length
@@ -153,22 +168,26 @@ Training and generation select CUDA when available and otherwise use CPU. `--dat
 
 `checkpoints/` is ignored by Git, so trained weights are not uploaded. After cloning, train a model or supply a compatible checkpoint before generation.
 
-## 当前语料 / Current Corpus
+## 文件与数据流 / Files and Data Flow
 
-`data/train.txt` 是张恨水的简体《春明外史》，来自[虚阁网全文](https://www.xuges.com/xdmj/zhs/cmws/index.htm)。保留第 1–86 回正文，移除网页导航、脚本、缩进与序言，用 OpenCC 转为简体，UTF-8 保存；未重复或补写正文。
+| 文件 / File | 用途 / Purpose |
+| --- | --- |
+| `config.py` | 模型与训练参数 / Model and training settings |
+| `tokenizer.py` | 字符与 ID 互转 / Character-to-ID encoding and decoding |
+| `dataset.py` | 随机输入及右移目标 / Random inputs and shifted targets |
+| `model.py` | Embedding、Attention、FFN、Decoder blocks、GPT、采样 / Model components and sampling |
+| `train.py` | Loss、AdamW、训练循环及保存 / Loss, optimizer, training loop, and saving |
+| `generate.py` | 加载 checkpoint 并逐字输出 / Checkpoint loading and character-by-character output |
+| `data/train.txt` | 当前简体小说语料 / Current Simplified Chinese corpus |
+| `data/SOURCE.md` | 来源、处理和统计 / Provenance, processing, and statistics |
 
-`data/train.txt` contains all 86 chapters of Zhang Henshui's *Chunming Waishi*, from the linked online text. Navigation, scripts, indentation, and prefaces were removed. OpenCC converted it to Simplified Chinese, saved as UTF-8, with no repetition or invented additions.
+`文本 → 字符 ID → x/y（y 右移一位）→ token + position embedding → Decoder blocks → logits → cross entropy → backward → AdamW`
 
-| 项目 / Item | 数值 / Value |
-| --- | ---: |
-| 总字符（含标点、换行）/ Total characters, including punctuation and newlines | 899,430 |
-| 汉字 / Han characters | 738,250 |
-| 字符词表 / Vocabulary | 3,764 |
-| 章节 / Chapters | 86 |
+`Text → character IDs → x/y (targets shifted by one character) → token + position embeddings → decoder blocks → logits → cross-entropy loss → backward → AdamW`
 
-这是一部民国白话小说，仍有少量诗词及旧式表达。约 90 万总字符与纯汉字数采用不同统计口径。来源、预处理、原作版权信息和 SHA-256 见 [data/SOURCE.md](data/SOURCE.md)。旧实验 A/B 使用 [Project Gutenberg 的《孽海花》版本](https://www.gutenberg.org/ebooks/25128)，35 回、4,091 字符词表；当前训练文件已替换为新语料。
+生成时，每一步只使用最后一个位置的 logits 选择下一字符，将它追加到输入，再继续预测；超出上下文长度时只保留最近 128 个字符参与计算。
 
-This is vernacular Republican-era fiction with some poetry and period expressions. Total character counts and Han-only counts differ. See [data/SOURCE.md](data/SOURCE.md) for provenance, preprocessing, original-work copyright information, and SHA-256. Earlier runs A/B used the linked Project Gutenberg edition of *Nie Hai Hua*, with 35 chapters and a 4,091-character vocabulary. The current training file contains the new corpus.
+During generation, the last position's logits select the next character, which is appended before the next prediction. When context exceeds the limit, only the latest 128 characters enter the model.
 
 ## 当前配置 / Current Configuration
 
@@ -190,23 +209,39 @@ This is vernacular Republican-era fiction with some poetry and period expression
 
 The current model has **1,578,804 parameters**. Inputs and targets are `[16,128]`, embeddings `[16,128,128]`, attention weights `[16,4,128,128]`, and logits `[16,128,3764]`.
 
-## 文件与数据流 / Files and Data Flow
+## 当前语料 / Current Corpus
 
-| 文件 / File | 用途 / Purpose |
-| --- | --- |
-| `config.py` | 模型与训练参数 / Model and training settings |
-| `tokenizer.py` | 字符与 ID 互转 / Character-to-ID encoding and decoding |
-| `dataset.py` | 随机输入及右移目标 / Random inputs and shifted targets |
-| `model.py` | Embedding、Attention、FFN、Decoder blocks、GPT、采样 / Model components and sampling |
-| `train.py` | Loss、AdamW、训练循环及保存 / Loss, optimizer, training loop, and saving |
-| `generate.py` | 加载 checkpoint 并逐字输出 / Checkpoint loading and character-by-character output |
-| `data/train.txt` | 当前简体小说语料 / Current Simplified Chinese corpus |
-| `data/SOURCE.md` | 来源、处理和统计 / Provenance, processing, and statistics |
+`data/train.txt` 是张恨水的简体《春明外史》，来自[虚阁网全文](https://www.xuges.com/xdmj/zhs/cmws/index.htm)。保留第 1–86 回正文，移除网页导航、脚本、缩进与序言，用 OpenCC 转为简体，UTF-8 保存；未重复或补写正文。
 
-`文本 → 字符 ID → x/y（y 右移一位）→ token + position embedding → Decoder blocks → logits → cross entropy → backward → AdamW`
+`data/train.txt` contains all 86 chapters of Zhang Henshui's *Chunming Waishi*, from the linked online text. Navigation, scripts, indentation, and prefaces were removed. OpenCC converted it to Simplified Chinese, saved as UTF-8, with no repetition or invented additions.
 
-`Text → character IDs → x/y (targets shifted by one character) → token + position embeddings → decoder blocks → logits → cross-entropy loss → backward → AdamW`
+| 项目 / Item | 数值 / Value |
+| --- | ---: |
+| 总字符（含标点、换行）/ Total characters, including punctuation and newlines | 899,430 |
+| 汉字 / Han characters | 738,250 |
+| 字符词表 / Vocabulary | 3,764 |
+| 章节 / Chapters | 86 |
 
-生成时，每一步只使用最后一个位置的 logits 选择下一字符，将它追加到输入，再继续预测；超出上下文长度时只保留最近 128 个字符参与计算。
+这是一部民国白话小说，仍有少量诗词及旧式表达。约 90 万总字符与纯汉字数采用不同统计口径。来源、预处理、原作版权信息和 SHA-256 见 [data/SOURCE.md](data/SOURCE.md)。旧实验 A/B 使用 [Project Gutenberg 的《孽海花》版本](https://www.gutenberg.org/ebooks/25128)，35 回、4,091 字符词表；当前训练文件已替换为新语料。
 
-During generation, the last position's logits select the next character, which is appended before the next prediction. When context exceeds the limit, only the latest 128 characters enter the model.
+This is vernacular Republican-era fiction with some poetry and period expressions. Total character counts and Han-only counts differ. See [data/SOURCE.md](data/SOURCE.md) for provenance, preprocessing, original-work copyright information, and SHA-256. Earlier runs A/B used the linked Project Gutenberg edition of *Nie Hai Hua*, with 35 chapters and a 4,091-character vocabulary. The current training file contains the new corpus.
+
+## 局限与说明 / Limitations and Notes
+
+- 当前生成仍存在人物、动作和逻辑错误，128 字符的上下文也限制了长距离情节的一致性。
+- 模型仅在一本小说上进行下一字符训练，没有指令微调，不具备聊天助手的指令遵循能力。
+- 没有独立验证集；训练语料抽样 loss 不能作为未见文本上的泛化指标，不同语料的 loss 也不能直接比较。
+- checkpoint 用于加载与生成；当前训练脚本只在结束时保存，未保存优化器状态，也未提供断点续训入口。
+- 仓库不包含本地训练权重，使用者需先训练或提供匹配的 checkpoint。
+
+- Generation still contains errors in characters, actions, and logic. The 128-character context limits longer story continuity.
+- Training predicts the next character in a single novel without instruction tuning; this is not an instruction-following chat assistant.
+- There is no held-out validation set. Loss sampled from training text does not measure generalization, and losses on different corpora are not directly comparable.
+- Checkpoints support loading and generation. Training saves only at completion, without optimizer state or a resume interface.
+- Local trained weights are not included in this repository; train a model or supply a compatible checkpoint.
+
+## 开发说明 / Development Notes
+
+初始项目搭建使用了 AI 辅助，随后围绕代码阅读、配置调整、语料处理、训练调试和生成效果开展学习与实验。本项目使用 “Built and trained” 描述工作，不声称所有代码均独立手写。
+
+AI assistance was used for the initial project setup. Subsequent learning and experiments focused on reading the code, adjusting configurations, preparing corpora, debugging training, and inspecting generation. “Built and trained” describes the work without claiming that every line was independently handwritten.
